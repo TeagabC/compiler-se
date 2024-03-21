@@ -1,0 +1,15 @@
+struct Vec2 {
+  x : f32;
+  y : f32;
+};
+
+v : Vec2;
+
+func addVec2(a : Vec2, b : Vec2) : Vec2 {
+  ret : Vec2;
+  ret.x = a.x + b.x;
+  ret.y = a.y + b.y;
+
+  return ret;
+}
+
