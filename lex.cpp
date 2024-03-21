@@ -7,6 +7,13 @@
 #include <stdio.h>
 #include <type_traits>
 
+#define LEX_DEBUG
+
+#ifdef LEX_DEBUG
+#define LEX_PRINT_TOKENS true
+#else
+#define LEX_PRINT_TOKENS false
+#endif
 
 const char * TokenTypes[] = {
   "NONE",
@@ -88,6 +95,13 @@ void printToken(const Token& token) {
     printf("%c", *current++);
   }
   printf("\"\n");
+}
+
+void printTokens(Token* tokens) {
+  Token* p = tokens;
+  while (p->type != TokenType::END) {
+    printToken(*p++);
+  }
 }
 
 struct KeywordPair {
@@ -254,6 +268,11 @@ Token* lex(char* input, int max_token_count) {
 
   tokens[i] = token;
   destroyKeywordsTable();
+
+  if (LEX_PRINT_TOKENS) {
+    printTokens(tokens);
+  }
+
   return tokens;
 }
 
