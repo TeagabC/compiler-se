@@ -1,10 +1,9 @@
 #include "parser.h"
 #include "lex.h"
 #include "parser_types.h"
+#include "stack.h"
 
 #include <cassert>
-#include <cstdint>
-#include <cstdlib>
 #include <cstring>
 
 #include <stdio.h>
@@ -23,101 +22,33 @@
 
 #define MAX_BUFFER_COUNT 64
 
+
+Stack* stack;
+Stack* buffer_pool;
+
+void* resetStacks(void* stack_reset, void* buffer_pool_reset = nullptr) {
+  stackPop(stack, stack_reset);
+  stackPop(buffer_pool, buffer_pool_reset);
+  return nullptr;
+}
+
+void* resetStack(void* stack_reset) {
+  stackPop(stack, stack_reset);
+  return nullptr;
+}
+
+void* resetBufferPool(void* buffer_pool_reset) {
+  stackPop(buffer_pool, buffer_pool_reset);
+  return nullptr;
+}
+
 bool check(Token* token, TokenType type) {
   if (token->type != type) return false;
   return true;
 }
 
-int stack_capacity = 65536;
-uint8_t* stack_base = nullptr;
-uint8_t* stack_current = nullptr;
-
-void create_stack(int capacity = 65536) {
-  assert(stack_base == nullptr);
-  stack_capacity = capacity;
-  stack_base = (uint8_t*) malloc(stack_capacity);
-  stack_current = stack_base;
-  assert(stack_base != nullptr);
-}
-
-void destroy_stack() {
-  if (stack_base == nullptr) return;
-  stack_capacity = 0;
-  free(stack_base);
-  stack_base = nullptr;
-  stack_current = nullptr;
-}
-
-
-void* push_stack(int size) {
-  assert(stack_current - stack_base + size < stack_capacity);
-  void* ret = stack_current;
-  stack_current += size;
-  memset(ret, 0, size);
-  //fprintf(stderr, "Push stack: %li\n", stack_current - stack_base);
-  return ret;
-}
-
-void* pop_stack(int size) {
-  assert(stack_current - size >= stack_base);
-  stack_current -= size;
-  //fprintf(stderr, "Pop stack: %li\n", stack_current - stack_base);
-  return nullptr;
-}
-
-void* pop_stack(void* ptr) {
-  assert(ptr < stack_current && ptr > stack_base);
-  stack_current = (uint8_t*) ptr;
-  //fprintf(stderr, "Pop stack: %li\n", stack_current - stack_base);
-  return nullptr;
-}
-
-int buffer_pool_capacity = 65536;
-uint8_t* buffer_pool_base = nullptr;
-uint8_t* buffer_pool_current = nullptr;
-
-void create_buffer_pool(int capacity = 65536) {
-  assert(buffer_pool_base == nullptr);
-  buffer_pool_capacity = capacity;
-  buffer_pool_base = (uint8_t*) malloc(buffer_pool_capacity);
-  buffer_pool_current = buffer_pool_base;
-  assert(buffer_pool_base != nullptr);
-}
-
-void destroy_buffer_pool() {
-  if (buffer_pool_base == nullptr) return;
-  buffer_pool_capacity = 0;
-  free(buffer_pool_base);
-  buffer_pool_base = nullptr;
-  buffer_pool_current = nullptr;
-}
-
-
-void* push_buffer_pool(int size) {
-  assert(buffer_pool_current - buffer_pool_base + size < buffer_pool_capacity);
-  void* ret = buffer_pool_current;
-  buffer_pool_current += size;
-  memset(ret, 0, size);
-  //fprintf(stderr, "Push buffer_pool: %li\n", buffer_pool_current - buffer_pool_base);
-  return ret;
-}
-
-void* pop_buffer_pool(int size) {
-  assert(buffer_pool_current - size >= buffer_pool_base);
-  buffer_pool_current -= size;
-  //fprintf(stderr, "Pop buffer_pool: %li\n", buffer_pool_current - buffer_pool_base);
-  return nullptr;
-}
-
-void* pop_buffer_pool(void* ptr) {
-  assert(ptr < buffer_pool_current && ptr > buffer_pool_base);
-  buffer_pool_current = (uint8_t*) ptr;
-  //fprintf(stderr, "Pop buffer_pool: %li\n", buffer_pool_current - buffer_pool_base);
-  return nullptr;
-}
-
 SimpleType* simpleType(Token*& tokens) {
-  SimpleType* node = (SimpleType*) push_stack(sizeof(SimpleType));
+  SimpleType* node = (SimpleType*) stackPush(stack, sizeof(SimpleType));
   node->start = tokens;
 
   switch (tokens->type) {
@@ -137,7 +68,7 @@ SimpleType* simpleType(Token*& tokens) {
       node->type = ASTType::SIMPLE_TYPE_F32;
       break;
     default:
-      return (SimpleType*) pop_stack(node);
+      return (SimpleType*) resetStack(node);
   }
 
   node->end = ++tokens;
@@ -146,12 +77,12 @@ SimpleType* simpleType(Token*& tokens) {
 }
 
 Identifier* identifier(Token*& tokens) {
-  Identifier* node = (Identifier*) push_stack(sizeof(Identifier));
+  Identifier* node = (Identifier*) stackPush(stack, sizeof(Identifier));
 
   Token* current = tokens;
   node->start = tokens;
 
-  if (!check(current++, TokenType::IDENTIFIER)) return (Identifier*) pop_stack(node);
+  if (!check(current++, TokenType::IDENTIFIER)) return (Identifier*) resetStack(node);
 
   node->identifier = tokens;
   if (check(current, TokenType::DOT)) {
@@ -167,7 +98,7 @@ Identifier* identifier(Token*& tokens) {
 }
 
 Type* type(Token*& tokens) {
-  Type* node = (Type*) push_stack(sizeof(Type));
+  Type* node = (Type*) stackPush(stack, sizeof(Type));
   node->start = tokens;
   
   node->simple_type = simpleType(tokens);
@@ -184,11 +115,11 @@ Type* type(Token*& tokens) {
     return node;
   }
 
-  return (Type*) pop_stack(node);
+  return (Type*) resetStack(node);
 }
 
 Qualifier* qualifier(Token*& tokens) {
-  Qualifier* node = (Qualifier*) push_stack(sizeof(Qualifier));
+  Qualifier* node = (Qualifier*) stackPush(stack, sizeof(Qualifier));
   node->start = tokens;
 
   switch(tokens->type) {
@@ -205,7 +136,7 @@ Qualifier* qualifier(Token*& tokens) {
       break;
 
     default:
-      return (Qualifier*) pop_stack(node);
+      return (Qualifier*) resetStack(node);
   }
 
   node->end = ++tokens;
@@ -217,13 +148,12 @@ Expr* expr(Token*& tokens, bool check_binary = true);
 Block* block(Token*& tokens);
 
 Declaration* declaration(Token*& tokens) {
-  Declaration* node = (Declaration*) push_stack(sizeof(Declaration));
+  Declaration* node = (Declaration*) stackPush(stack, sizeof(Declaration));
   
   unsigned byte_count;
-  Qualifier** qualifier_buffer = (Qualifier**) push_buffer_pool(MAX_BUFFER_COUNT * sizeof(Qualifier*));
+  Qualifier** qualifier_buffer = (Qualifier**) stackPush(buffer_pool, MAX_BUFFER_COUNT * sizeof(Qualifier*));
 
   Token* current = tokens;
-
   node->start = tokens;
 
   DEBUG_PRINT("Try Decl");
@@ -233,12 +163,12 @@ Declaration* declaration(Token*& tokens) {
   }
 
   node->identifier = identifier(current);
-  if (node->identifier == nullptr) return (Declaration*) pop_stack(node);
+  if (node->identifier == nullptr) return (Declaration*) resetStacks(node, qualifier_buffer);
 
-  if(!check(current++, TokenType::COLON)) return (Declaration*) pop_stack(node);
+  if(!check(current++, TokenType::COLON)) return (Declaration*) resetStacks(node, qualifier_buffer);
 
   node->decl_type = type(current);
-  if (node->decl_type == nullptr) return (Declaration*) pop_stack(node);
+  if (node->decl_type == nullptr) return (Declaration*) resetStacks(node, qualifier_buffer);
 
   DEBUG_PRINT("Try Decl SET");
 
@@ -246,17 +176,19 @@ Declaration* declaration(Token*& tokens) {
     DEBUG_PRINT("Start Decl SET");
     node->expr = expr(++current);
     DEBUG("Decl Expr", node->expr->start, node->expr->end);
-    if (node->expr == nullptr) return (Declaration*) pop_stack(node);
+    if (node->expr == nullptr) return (Declaration*) resetStacks(node, qualifier_buffer);
     DEBUG_PRINT("End Decl SET");
   }
 
   DEBUG_PRINT("Try Decl SEMI");
-  if(!check(current++, TokenType::SEMI)) return (Declaration*) pop_stack(node);
+  if(!check(current++, TokenType::SEMI)) return (Declaration*) resetStacks(node, qualifier_buffer);
   DEBUG_PRINT("SUCESS Decl SEMI");
 
   byte_count = node->qualifiers_count * sizeof(Qualifier*);
-  node->qualifiers = (Qualifier**) push_stack(byte_count); 
+  node->qualifiers = (Qualifier**) stackPush(stack, byte_count); 
   memcpy(node->qualifiers, qualifier_buffer, byte_count);
+
+  resetBufferPool(qualifier_buffer);
 
   tokens = current;
   node->type = ASTType::DECLARATION;
@@ -266,18 +198,18 @@ Declaration* declaration(Token*& tokens) {
 }
 
 Assignment* assignment(Token*& tokens) {
-  Assignment* node = (Assignment*) push_stack(sizeof(Assignment));
+  Assignment* node = (Assignment*) stackPush(stack, sizeof(Assignment));
   Token* current = tokens;
   node->start = tokens;
 
   node->identifier = identifier(current);
-  if (node->identifier == nullptr) return (Assignment*) pop_stack(node);
-  if (!check(current++, TokenType::SET)) return (Assignment*) pop_stack(node);
+  if (node->identifier == nullptr) return (Assignment*) resetStack(node);
+  if (!check(current++, TokenType::SET)) return (Assignment*) resetStack(node);
 
   node->expr = expr(current);
-  if (node->expr == nullptr) return (Assignment*) pop_stack(node);
+  if (node->expr == nullptr) return (Assignment*) resetStack(node);
 
-  if (!check(current++, TokenType::SEMI)) return (Assignment*) pop_stack(node);
+  if (!check(current++, TokenType::SEMI)) return (Assignment*) resetStack(node);
 
   tokens = current;
   node->type = ASTType::ASSIGNMENT;
@@ -287,21 +219,21 @@ Assignment* assignment(Token*& tokens) {
 }
 
 Conditional* conditional(Token*& tokens) {
-  Conditional* node = (Conditional*) push_stack(sizeof(Conditional));
+  Conditional* node = (Conditional*) stackPush(stack, sizeof(Conditional));
   Token* current = tokens;
   node->start = tokens;
 
-  if (!check(current++, TokenType::IF)) return (Conditional*) pop_stack(node);
+  if (!check(current++, TokenType::IF)) return (Conditional*) resetStack(node);
 
   node->condition = expr(current);
-  if (node->condition == nullptr) return (Conditional*) pop_stack(node);
+  if (node->condition == nullptr) return (Conditional*) resetStack(node);
 
   node->block = block(current);
-  if (node->block == nullptr) return (Conditional*) pop_stack(node);
+  if (node->block == nullptr) return (Conditional*) resetStack(node);
 
   if (check(current++, TokenType::ELSE)) {
     node->other = block(current);
-    if (node->other == nullptr) return (Conditional*) pop_stack(node);
+    if (node->other == nullptr) return (Conditional*) resetStack(node);
   }
 
   tokens = current;
@@ -312,17 +244,17 @@ Conditional* conditional(Token*& tokens) {
 }
 
 While* while_(Token*& tokens) {
-  While* node = (While*) push_stack(sizeof(While));
+  While* node = (While*) stackPush(stack, sizeof(While));
   Token* current = tokens;
   node->start = tokens;
 
-  if (!check(current++, TokenType::WHILE)) return (While*) pop_stack(node);
+  if (!check(current++, TokenType::WHILE)) return (While*) resetStack(node);
 
   node->condition = expr(current);
-  if (node->condition == nullptr) return (While*) pop_stack(node);
+  if (node->condition == nullptr) return (While*) resetStack(node);
 
   node->block = block(current);
-  if (node->block == nullptr) return (While*) pop_stack(node);
+  if (node->block == nullptr) return (While*) resetStack(node);
 
   tokens = current;
   node->type = ASTType::WHILE;
@@ -332,12 +264,12 @@ While* while_(Token*& tokens) {
 }
 
 Break* break_(Token*& tokens) {
-  Break* node = (Break*) push_stack(sizeof(Break));
+  Break* node = (Break*) stackPush(stack, sizeof(Break));
   Token* current = tokens;
   node->start = tokens;
 
-  if (!check(current++, TokenType::BREAK)) return (Break*) pop_stack(node);
-  if (!check(current++, TokenType::SEMI)) return (Break*) pop_stack(node);
+  if (!check(current++, TokenType::BREAK)) return (Break*) resetStack(node);
+  if (!check(current++, TokenType::SEMI)) return (Break*) resetStack(node);
 
   tokens = current;
   node->type = ASTType::BREAK;
@@ -347,12 +279,12 @@ Break* break_(Token*& tokens) {
 }
 
 Continue* continue_(Token*& tokens) {
-  Continue* node = (Continue*) push_stack(sizeof(Continue));
+  Continue* node = (Continue*) stackPush(stack, sizeof(Continue));
   Token* current = tokens;
   node->start = tokens;
 
-  if (!check(current++, TokenType::CONTINUE)) return (Continue*) pop_stack(node);
-  if (!check(current++, TokenType::SEMI)) return (Continue*) pop_stack(node);
+  if (!check(current++, TokenType::CONTINUE)) return (Continue*) resetStack(node);
+  if (!check(current++, TokenType::SEMI)) return (Continue*) resetStack(node);
 
   tokens = current;
   node->type = ASTType::CONTINUE;
@@ -362,16 +294,16 @@ Continue* continue_(Token*& tokens) {
 }
 
 Return* return_(Token*& tokens) {
-  Return* node = (Return*) push_stack(sizeof(Return));
+  Return* node = (Return*) stackPush(stack, sizeof(Return));
   Token* current = tokens;
 
   node->start = tokens;
 
-  if (!check(current++, TokenType::RETURN)) return (Return*) pop_stack(node);
+  if (!check(current++, TokenType::RETURN)) return (Return*) resetStack(node);
 
   node->expr = expr(current);
 
-  if (!check(current++, TokenType::SEMI)) return (Return*) pop_stack(node);
+  if (!check(current++, TokenType::SEMI)) return (Return*) resetStack(node);
 
   tokens = current;
   node->type = ASTType::RETURN;
@@ -381,7 +313,7 @@ Return* return_(Token*& tokens) {
 }
 
 Statement* statement(Token*& tokens) {
-  Statement* node = (Statement*) push_stack(sizeof(Statement));
+  Statement* node = (Statement*) stackPush(stack, sizeof(Statement));
   Token* current = tokens;
 
   node->start = tokens;
@@ -391,7 +323,7 @@ Statement* statement(Token*& tokens) {
     case TokenType::IF:
       node->type = ASTType::STATEMENT_CONDITION;
       node->conditional = conditional(current);
-      if (node->conditional == nullptr) return (Statement*) pop_stack(node); 
+      if (node->conditional == nullptr) return (Statement*) resetStack(node); 
       tokens = current;
       node->end = current;
       DEBUG("Match Conditional Statement", node->start, node->end);
@@ -400,7 +332,7 @@ Statement* statement(Token*& tokens) {
     case TokenType::WHILE:
       node->type = ASTType::STATEMENT_WHILE;
       node->while_ = while_(current); 
-      if (node->while_ == nullptr) return (Statement*) pop_stack(node); 
+      if (node->while_ == nullptr) return (Statement*) resetStack(node); 
       tokens = current;
       node->end = current;
       DEBUG("Match While Statement", node->start, node->end);
@@ -409,7 +341,7 @@ Statement* statement(Token*& tokens) {
     case TokenType::BREAK:
       node->type = ASTType::STATEMENT_BREAK;
       node->break_ = break_(current);
-      if (node->break_ == nullptr) return (Statement*) pop_stack(node); 
+      if (node->break_ == nullptr) return (Statement*) resetStack(node); 
       tokens = current;
       node->end = current;
       DEBUG("Match Break Statement", node->start, node->end);
@@ -418,7 +350,7 @@ Statement* statement(Token*& tokens) {
     case TokenType::CONTINUE:
       node->type = ASTType::STATEMENT_CONTINUE;
       node->continue_ = continue_(current);
-      if (node->continue_ == nullptr) return (Statement*) pop_stack(node); 
+      if (node->continue_ == nullptr) return (Statement*) resetStack(node); 
       tokens = current;
       node->end = current;
       DEBUG("Match Continue Statement", node->start, node->end);
@@ -427,7 +359,7 @@ Statement* statement(Token*& tokens) {
     case TokenType::RETURN:
       node->type = ASTType::STATEMENT_RETURN;
       node->return_ = return_(current);
-      if (node->return_ == nullptr) return (Statement*) pop_stack(node); 
+      if (node->return_ == nullptr) return (Statement*) resetStack(node); 
       tokens = current;
       node->end = current;
       DEBUG("Match Return Statement", node->start, node->end);
@@ -445,8 +377,8 @@ Statement* statement(Token*& tokens) {
 
       node->type = ASTType::STATEMENT_EXPR;
       node->expr = expr(current);
-      if (node->expr == nullptr) return (Statement*) pop_stack(node); 
-      if (!check(current++, TokenType::SEMI)) return (Statement*) pop_stack(node);
+      if (node->expr == nullptr) return (Statement*) resetStack(node); 
+      if (!check(current++, TokenType::SEMI)) return (Statement*) resetStack(node);
       
       tokens = current;
       node->end = current;
@@ -456,7 +388,7 @@ Statement* statement(Token*& tokens) {
 }
 
 BlockTag* blockTag(Token*& tokens) {
-  BlockTag* node = (BlockTag*) push_stack(sizeof(BlockTag));
+  BlockTag* node = (BlockTag*) stackPush(stack, sizeof(BlockTag));
   Token* current = tokens;
   node->start = tokens;
 
@@ -478,17 +410,17 @@ BlockTag* blockTag(Token*& tokens) {
     return node;
   }
 
-  return (BlockTag*) pop_stack(node);
+  return (BlockTag*) resetStack(node);
 }
 
 Block* block(Token*& tokens) {
-  Block* node = (Block*) push_stack(sizeof(Block));
+  Block* node = (Block*) stackPush(stack, sizeof(Block));
 
   unsigned byte_count_declarations;
-  Declaration** declarations_buffer = (Declaration**) push_buffer_pool(MAX_BUFFER_COUNT * sizeof(Declaration*));
+  Declaration** declarations_buffer = (Declaration**) stackPush(buffer_pool, MAX_BUFFER_COUNT * sizeof(Declaration*));
 
   unsigned byte_count_tags;
-  BlockTag** block_tag_buffer = (BlockTag**) push_buffer_pool(MAX_BUFFER_COUNT * sizeof(BlockTag*));
+  BlockTag** block_tag_buffer = (BlockTag**) stackPush(buffer_pool, MAX_BUFFER_COUNT * sizeof(BlockTag*));
 
   Token* current = tokens;
   node->start = tokens;
@@ -496,7 +428,7 @@ Block* block(Token*& tokens) {
   DEBUG_PRINT("Try Block");
   if (!check(current, TokenType::LEFT_BRACE)){
     node->statement = statement(current);
-    if (node->statement == nullptr) return (Block*) pop_stack(node);
+    if (node->statement == nullptr) return (Block*) resetStacks(node, declarations_buffer);
    
     tokens = current;
     node->type = ASTType::BLOCK;
@@ -509,9 +441,9 @@ Block* block(Token*& tokens) {
 
   if (check(current, TokenType::COLON)) {
     node->namespace_ = identifier(++current);
-    if (node->namespace_ == nullptr) return (Block*) pop_stack(node);
+    if (node->namespace_ == nullptr) return (Block*) resetStacks(node, declarations_buffer);
     
-    if (!check(current, TokenType::SEMI)) return (Block*) pop_stack(node);
+    if (!check(current, TokenType::SEMI)) return (Block*) resetStacks(node, declarations_buffer);
   }
 
   DEBUG_PRINT("Try Block Decls");
@@ -527,15 +459,17 @@ Block* block(Token*& tokens) {
   }
 
   DEBUG_PRINT("Try Block Right Brace");
-  if (!check(current++, TokenType::RIGHT_BRACE)) return (Block*) pop_stack(node);
+  if (!check(current++, TokenType::RIGHT_BRACE)) return (Block*) resetStacks(node, declarations_buffer);
 
   byte_count_declarations = node->declarations_count * sizeof(Declaration*);
-  node->declarations = (Declaration**) push_stack(byte_count_declarations); 
+  node->declarations = (Declaration**) stackPush(stack, byte_count_declarations); 
   memcpy(node->declarations, declarations_buffer, byte_count_declarations);
 
   byte_count_tags = node->block_tags_count * sizeof(BlockTag*);
-  node->block_tags = (BlockTag**) push_stack(byte_count_tags); 
+  node->block_tags = (BlockTag**) stackPush(stack, byte_count_tags); 
   memcpy(node->block_tags, block_tag_buffer, byte_count_tags);
+
+  resetBufferPool(declarations_buffer);
 
   tokens = current;
   node->type = ASTType::BLOCK;
@@ -545,7 +479,7 @@ Block* block(Token*& tokens) {
 }
 
 Literal* literal(Token*& tokens) {
-  Literal* node = (Literal*) push_stack(sizeof(Literal));
+  Literal* node = (Literal*) stackPush(stack, sizeof(Literal));
   node->start = tokens;
 
   // TODO: parse the actual literal
@@ -578,23 +512,23 @@ Literal* literal(Token*& tokens) {
       DEBUG("Match Literal Bool", node->start, node->end);
       return node;
     default:
-      return (Literal*) pop_stack(node);
+      return (Literal*) resetStack(node);
   }
 }
 
 Call* call(Token*& tokens) {
-  Call* node = (Call*) push_stack(sizeof(Call));
+  Call* node = (Call*) stackPush(stack, sizeof(Call));
   Token* current = tokens;
 
   unsigned byte_count;
-  Expr** args_buffer = (Expr**) push_buffer_pool(MAX_BUFFER_COUNT * sizeof(Expr*));
+  Expr** args_buffer = (Expr**) stackPush(buffer_pool, MAX_BUFFER_COUNT * sizeof(Expr*));
 
   node->start = tokens;
 
   node->identifier = identifier(current);
-  if (node->identifier == nullptr) return (Call*) pop_stack(node);
+  if (node->identifier == nullptr) return (Call*) resetStacks(node, args_buffer);
 
-  if (!check(current++, TokenType::LEFT_PAREN)) return (Call*) pop_stack(node);
+  if (!check(current++, TokenType::LEFT_PAREN)) return (Call*) resetStacks(node, args_buffer);
 
   args_buffer[node->arguments_count] = expr(current);
   while (args_buffer[node->arguments_count] != nullptr) {
@@ -602,11 +536,13 @@ Call* call(Token*& tokens) {
     args_buffer[++node->arguments_count] = expr(current);
   }
   
-  if (!check(current++, TokenType::RIGHT_PAREN)) return (Call*) pop_stack(node);
+  if (!check(current++, TokenType::RIGHT_PAREN)) return (Call*) resetStacks(node, args_buffer);
 
   byte_count = node->arguments_count * sizeof(Expr*);
-  node->arguments = (Expr**) push_stack(byte_count); 
+  node->arguments = (Expr**) stackPush(stack, byte_count); 
   memcpy(node->arguments, args_buffer, byte_count);
+
+  resetBufferPool(args_buffer);
 
   tokens = current;
   node->type = ASTType::CALL;
@@ -616,7 +552,7 @@ Call* call(Token*& tokens) {
 }
 
 Unary* unary(Token*& tokens) {
-  Unary* node = (Unary*) push_stack(sizeof(Unary));
+  Unary* node = (Unary*) stackPush(stack, sizeof(Unary));
   Token* current = tokens;
 
   node->start = tokens;
@@ -632,11 +568,11 @@ Unary* unary(Token*& tokens) {
       node->type = ASTType::UNARY_MINUS;
 
     default:
-      return (Unary*) pop_stack(node);
+      return (Unary*) resetStack(node);
   }
 
   node->expr = expr(++current, false);
-  if (node->expr == nullptr) return (Unary*) pop_stack(node);
+  if (node->expr == nullptr) return (Unary*) resetStack(node);
 
   node->end = current;
   DEBUG("Match Unary", node->start, node->end);
@@ -652,14 +588,14 @@ Expr* makeBinaryExpr(Token* start, Token* end, Expr* first, Expr* second, ASTTyp
   Expr* node;
   Binary* binary;
 
-  binary = (Binary*) push_stack(sizeof(Binary));
+  binary = (Binary*) stackPush(stack, sizeof(Binary));
   binary->type = type;
   binary->start = start;
   binary->end = end;
   binary->first = first;
   binary->second = second;
 
-  node = (Expr*) push_stack(sizeof(Expr));
+  node = (Expr*) stackPush(stack, sizeof(Expr));
   node->type = ASTType::EXPRESSION_BINARY;
   node->binary = binary;
   node->start = start;
@@ -669,17 +605,17 @@ Expr* makeBinaryExpr(Token* start, Token* end, Expr* first, Expr* second, ASTTyp
 }
 
 Binary* binary(Token*& tokens) {
-  Binary* node = (Binary*) push_stack(sizeof(Binary));
+  Binary* node = (Binary*) stackPush(stack, sizeof(Binary));
   Token* current = tokens;
   ASTType type; 
   
   unsigned expr_count = 0;
-  Expr** expr_buffer = (Expr**) push_buffer_pool(MAX_BUFFER_COUNT * sizeof(Expr*));
+  Expr** expr_buffer = (Expr**) stackPush(buffer_pool, MAX_BUFFER_COUNT * sizeof(Expr*));
   unsigned op_count = 0;
-  ASTType* op_buffer = (ASTType*) push_buffer_pool(MAX_BUFFER_COUNT * sizeof(ASTType));
+  ASTType* op_buffer = (ASTType*) stackPush(buffer_pool, MAX_BUFFER_COUNT * sizeof(ASTType));
 
   expr_buffer[expr_count] = expr(current, false);
-  if (expr_buffer[expr_count++] == nullptr) return (Binary*) pop_stack(node);
+  if (expr_buffer[expr_count++] == nullptr) return (Binary*) resetStacks(node, expr_buffer);
 
   bool is_binary_expr = false;
   do {
@@ -778,7 +714,7 @@ Binary* binary(Token*& tokens) {
     op_count--;
   }
 
-  if (!is_binary_expr) return (Binary*) pop_stack(node);
+  if (!is_binary_expr) return (Binary*) resetStacks(node, expr_buffer);
 
   /*
    * WARNING: this is fragile. we know that expr_buffer contains
@@ -816,7 +752,7 @@ Expr* expr(Token*& tokens, bool check_binary) {
   }
   DEBUG_PRINT("Fail Expr Left Paren");
 
-  node = (Expr*) push_stack(sizeof(Expr));
+  node = (Expr*) stackPush(stack, sizeof(Expr));
   node->start = tokens;
 
   DEBUG_PRINT("Try Expr Call");
@@ -872,7 +808,7 @@ Expr* expr(Token*& tokens, bool check_binary) {
   }
     
   DEBUG_PRINT("Fail Expr");
-  return (Expr*) pop_stack(node);
+  return (Expr*) resetStack(node);
 }
 
 Expr* expr(Token*& tokens) {
@@ -880,14 +816,14 @@ Expr* expr(Token*& tokens) {
 }
 
 FunctionParam* functionParam(Token*& tokens) {
-  FunctionParam* node = (FunctionParam*) push_stack(sizeof(FunctionParam));
+  FunctionParam* node = (FunctionParam*) stackPush(stack, sizeof(FunctionParam));
 
   Token* current = tokens;
   node->start = tokens;
   
   node->identifier = identifier(current);
   if (node->identifier != nullptr) { 
-    if (!check(current++, TokenType::COLON)) return (FunctionParam*) pop_stack(node);
+    if (!check(current++, TokenType::COLON)) return (FunctionParam*) resetStack(node);
   }
 
   node->decl_type = type(current);
@@ -899,14 +835,14 @@ FunctionParam* functionParam(Token*& tokens) {
     return node;
   }
   
-  return (FunctionParam*) pop_stack(node);
+  return (FunctionParam*) resetStack(node);
 }
 
 FunctionHeader* functionHeader(Token*& tokens) {
-  FunctionHeader* node = (FunctionHeader*) push_stack(sizeof(FunctionHeader));
+  FunctionHeader* node = (FunctionHeader*) stackPush(stack, sizeof(FunctionHeader));
 
   unsigned byte_count;
-  FunctionParam** param_buffer = (FunctionParam**) push_buffer_pool(MAX_BUFFER_COUNT * sizeof(FunctionParam*));
+  FunctionParam** param_buffer = (FunctionParam**) stackPush(buffer_pool, MAX_BUFFER_COUNT * sizeof(FunctionParam*));
 
   Token* current = tokens;
   node->start = tokens;
@@ -916,12 +852,12 @@ FunctionHeader* functionHeader(Token*& tokens) {
     current++;
   }
 
-  if (!check(current++, TokenType::FUNC)) return (FunctionHeader*) pop_stack(node);
+  if (!check(current++, TokenType::FUNC)) return (FunctionHeader*) resetStacks(node, param_buffer);
 
   node->identifier = identifier(current);
-  if (node->identifier == nullptr) return (FunctionHeader*) pop_stack(node);
+  if (node->identifier == nullptr) return (FunctionHeader*) resetStacks(node, param_buffer);
 
-  if(!check(current++, TokenType::LEFT_PAREN)) return (FunctionHeader*) pop_stack(node);
+  if(!check(current++, TokenType::LEFT_PAREN)) return (FunctionHeader*) resetStacks(node, param_buffer);
 
   param_buffer[node->parameter_count] = functionParam(current);
   while(param_buffer[node->parameter_count] != nullptr) {
@@ -929,15 +865,17 @@ FunctionHeader* functionHeader(Token*& tokens) {
     param_buffer[++node->parameter_count] = functionParam(current);
   }
 
-  if(!check(current++, TokenType::RIGHT_PAREN)) return (FunctionHeader*) pop_stack(node);
-  if(!check(current++, TokenType::COLON)) return (FunctionHeader*) pop_stack(node);
+  if(!check(current++, TokenType::RIGHT_PAREN)) return (FunctionHeader*) resetStacks(node, param_buffer);
+  if(!check(current++, TokenType::COLON)) return (FunctionHeader*) resetStacks(node, param_buffer);
 
   node->return_type = type(current);
-  if (node->return_type == nullptr) return (FunctionHeader*) pop_stack(node);
+  if (node->return_type == nullptr) return (FunctionHeader*) resetStacks(node, param_buffer);
 
   byte_count = node->parameter_count * sizeof(FunctionParam*);
-  node->parameter_list = (FunctionParam**) push_stack(byte_count); 
+  node->parameter_list = (FunctionParam**) stackPush(stack, byte_count); 
   memcpy(node->parameter_list, param_buffer, byte_count);
+
+  resetBufferPool(param_buffer);
 
   tokens = current;
   node->type = ASTType::FUNC_HEADER;
@@ -947,13 +885,13 @@ FunctionHeader* functionHeader(Token*& tokens) {
 }
 
 Function* function(Token*& tokens) {
-  Function* node = (Function*) push_stack(sizeof(Function));
+  Function* node = (Function*) stackPush(stack, sizeof(Function));
 
   Token* current = tokens;
   node->start = tokens;
 
   node->header = functionHeader(current);
-  if (node->header == nullptr) return (Function*) pop_stack(sizeof(Function));
+  if (node->header == nullptr) return (Function*) resetStack(node);
 
   if (check(current, TokenType::SEMI)) {
     tokens = ++current;
@@ -964,7 +902,7 @@ Function* function(Token*& tokens) {
   }
 
   node->block = block(current);
-  if (node->block == nullptr) return (Function*) pop_stack(sizeof(Function));
+  if (node->block == nullptr) return (Function*) resetStack(node);
 
   tokens = current;
   node->type = ASTType::FUNCTION;
@@ -974,32 +912,34 @@ Function* function(Token*& tokens) {
 }
 
 Struct* struct_(Token*& tokens) {
-  Struct* node = (Struct*) push_stack(sizeof(Struct));
+  Struct* node = (Struct*) stackPush(stack, sizeof(Struct));
 
   unsigned byte_count;
-  Declaration** decl_buffer = (Declaration**) push_buffer_pool(MAX_BUFFER_COUNT * sizeof(Declaration*));
+  Declaration** decl_buffer = (Declaration**) stackPush(buffer_pool, MAX_BUFFER_COUNT * sizeof(Declaration*));
 
   Token* current = tokens;
   node->start = tokens;
 
-  if (!check(current++, TokenType::STRUCT)) return (Struct*) pop_stack(node);
+  if (!check(current++, TokenType::STRUCT)) return (Struct*) resetStacks(node, decl_buffer);
   
   node->identifier = identifier(current);
-  if (node->identifier == nullptr) return (Struct*) pop_stack(node);
+  if (node->identifier == nullptr) return (Struct*) resetStack(node);
 
-  if (!check(current++, TokenType::LEFT_BRACE)) return (Struct*) pop_stack(node);
+  if (!check(current++, TokenType::LEFT_BRACE)) return (Struct*) resetStacks(node, decl_buffer);
 
   decl_buffer[node->declarations_count] = declaration(current);
   while (decl_buffer[node->declarations_count] != nullptr) {
     decl_buffer[++node->declarations_count] = declaration(current);
   }
 
-  if (!check(current++, TokenType::RIGHT_BRACE)) return (Struct*) pop_stack(node);
-  if (!check(current++, TokenType::SEMI)) return (Struct*) pop_stack(node);
+  if (!check(current++, TokenType::RIGHT_BRACE)) return (Struct*) resetStacks(node, decl_buffer);
+  if (!check(current++, TokenType::SEMI)) return (Struct*) resetStacks(node, decl_buffer);
 
   byte_count = node->declarations_count * sizeof(Declaration*);
-  node->declarations = (Declaration**) push_stack(byte_count); 
+  node->declarations = (Declaration**) stackPush(stack, byte_count); 
   memcpy(node->declarations, decl_buffer, byte_count);
+
+  resetBufferPool(decl_buffer);
 
   tokens = current;
   node->type = ASTType::STRUCT;
@@ -1009,32 +949,34 @@ Struct* struct_(Token*& tokens) {
 }
 
 Enum* enum_(Token*& tokens) {
-  Enum* node = (Enum*) push_stack(sizeof(Enum));
+  Enum* node = (Enum*) stackPush(stack, sizeof(Enum));
 
   unsigned byte_count;
-  Token** token_buffer = (Token**) push_buffer_pool(MAX_BUFFER_COUNT * sizeof(Token*));
+  Token** token_buffer = (Token**) stackPush(buffer_pool, MAX_BUFFER_COUNT * sizeof(Token*));
 
   Token* current = tokens;
   node->start = tokens;
 
-  if (!check(current++, TokenType::ENUM)) return (Enum*) pop_stack(node);
+  if (!check(current++, TokenType::ENUM)) return (Enum*) resetStacks(node, token_buffer);
 
   node->identifier = identifier(current);
-  if (node->identifier == nullptr) return (Enum*) pop_stack(node);
+  if (node->identifier == nullptr) return (Enum*) resetStacks(node, token_buffer);
 
-  if (!check(current++, TokenType::LEFT_BRACE)) return (Enum*) pop_stack(node);
+  if (!check(current++, TokenType::LEFT_BRACE)) return (Enum*) resetStacks(node, token_buffer);
 
   while (check(current, TokenType::IDENTIFIER)) {
     token_buffer[node->members_count++] = current++;
     if (check(current, TokenType::COMMA)) current++;
   }
 
-  if (!check(current++, TokenType::RIGHT_BRACE)) return (Enum*) pop_stack(node);
-  if (!check(current++, TokenType::SEMI)) return (Enum*) pop_stack(node);
+  if (!check(current++, TokenType::RIGHT_BRACE)) return (Enum*) resetStacks(node, token_buffer);
+  if (!check(current++, TokenType::SEMI)) return (Enum*) resetStacks(node, token_buffer);
 
   byte_count = node->members_count * sizeof(Token*);
-  node->members = (Token**) push_stack(byte_count);
+  node->members = (Token**) stackPush(stack, byte_count);
   memcpy(node->members, token_buffer, byte_count);
+
+  resetBufferPool(token_buffer);
 
   tokens = current;
   node->type = ASTType::ENUM;
@@ -1045,7 +987,7 @@ Enum* enum_(Token*& tokens) {
 }
 
 PrimaryTag* primary_tag(Token*& tokens) {
-  PrimaryTag* node = (PrimaryTag*) push_stack(sizeof(PrimaryTag));
+  PrimaryTag* node = (PrimaryTag*) stackPush(stack, sizeof(PrimaryTag));
   node->start = tokens;
   
   DEBUG_PRINT("Try Primary Decl");
@@ -1080,15 +1022,15 @@ PrimaryTag* primary_tag(Token*& tokens) {
     return node;
   }
 
-  pop_stack(node);
+  resetStack(node);
   assert(false && "Primary tag");
 }
 
 Primary* primary(Token*& tokens) { 
-  Primary* node = (Primary*) push_stack(sizeof(Primary));
+  Primary* node = (Primary*) stackPush(stack, sizeof(Primary));
 
   unsigned byte_count;
-  PrimaryTag** tag_buffer = (PrimaryTag**) push_buffer_pool(MAX_BUFFER_COUNT * sizeof(PrimaryTag*));
+  PrimaryTag** tag_buffer = (PrimaryTag**) stackPush(buffer_pool, MAX_BUFFER_COUNT * sizeof(PrimaryTag*));
   node->start = tokens;
 
   while (tokens->type != TokenType::END) {
@@ -1097,8 +1039,10 @@ Primary* primary(Token*& tokens) {
   }
 
   byte_count = node->primary_tags_count * sizeof(PrimaryTag*);
-  node->primary_tags = (PrimaryTag**) push_stack(byte_count);
+  node->primary_tags = (PrimaryTag**) stackPush(stack, byte_count);
   memcpy(node->primary_tags, tag_buffer, byte_count);
+
+  resetBufferPool(tag_buffer);
 
   node->type = ASTType::PRIMARY;
   node->end = tokens;
@@ -1109,13 +1053,15 @@ Primary* parse(Token* tokens) {
   Token* current = tokens;
   Primary* output;
 
-  create_stack();
-  create_buffer_pool();
+  stack = stackCreate(65536, true);
+  buffer_pool = stackCreate(65536);
+
   output = primary(current);
-  destroy_buffer_pool();
+
+  stackDestroy(buffer_pool);
   return output;
 }
 
 void parse_destroy() {
-  destroy_stack();
+  stackDestroy(stack);
 }

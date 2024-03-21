@@ -21,7 +21,7 @@
 #endif
 
 
-Stack* stackCreate(int capacity) {
+Stack* stackCreate(int capacity, bool zero_initalize) {
   Stack* output = (Stack*) malloc(sizeof(Stack));
   output->base = (uint8_t*) malloc(capacity);
   
@@ -29,6 +29,7 @@ Stack* stackCreate(int capacity) {
 
   output->current = output->base;
   output->capacity = capacity;
+  output->zero_initialize = zero_initalize;
   DEBUG_PRINT("stackCreate: capacity = %i\n", capacity);
 
   return output;
@@ -50,7 +51,8 @@ void* stackPush(Stack* stack, int size) {
 
   void* output = stack->current;
   stack->current += size;
-  memset(output, 0, size);
+
+  if (stack->zero_initialize) memset(output, 0, size);
 
   DEBUG_PRINT("stackPush: stack: %p size = %i\n", stack, size);
   return output;
@@ -60,16 +62,11 @@ void stackPop(Stack* stack, int size) {
   DEBUG_ASSERT(stack->current - size >= stack->base && "stackPop underflow");
   stack->current -= size;
   DEBUG_PRINT("stackPop: stack: %p size = %i\n", stack, size);
-  return;
 }
 
-/* In the parser we often need to reset the stack to a point and return  
- * nullptr. This always returns nullptr so we can just return a call to this
- */
-void* stackReset(Stack* stack, void *reset_ptr) {
+void stackPop(Stack* stack, void *reset_ptr) {
   DEBUG_ASSERT(reset_ptr < stack->current && reset_ptr > stack->base);
   stack->current = (uint8_t*) reset_ptr;
   DEBUG_PRINT("stackReset: stack: %p reset_ptr = %p\n", stack, reset_ptr);
-  return nullptr;
 }
 
