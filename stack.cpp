@@ -3,18 +3,22 @@
 #include <cstdlib>
 #include <cstring>
 
+#define STACK_DEBUG_ASSERT
+
 #ifdef STACK_DEBUG
 #define STACK_DEBUG_ASSERT
 #define STACK_DEBUG_PRINT
 #endif
 
 #ifdef STACK_DEBUG_PRINT
+#include <cstdio>
 #define DEBUG_PRINT(...) printf(__VA_ARGS__);
 #else 
 #define DEBUG_PRINT(...)
 #endif
 
 #ifdef STACK_DEBUG_ASSERT
+#include <cassert>
 #define DEBUG_ASSERT(...) assert(__VA_ARGS__);
 #else
 #define DEBUG_ASSERT(...)

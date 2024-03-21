@@ -10,21 +10,17 @@
 
 #ifdef PARSER_DEBUG
 #define PARSER_DEBUG_TOKENS
-#define PARSER_DEBUG_PRINT
+#include <cstdio>
+#define DEBUG_PRINT(s) fprintf(stderr, "Line: %u -> %s\n", __LINE__, s);
+#else
+#define DEBUG_PRINT(s)
 #endif 
 
 #ifdef PARSER_DEBUG_TOKENS
-#include <stdio.h>
+#include <cstdio>
 #define DEBUG(s, t, t2) fprintf(stderr, "%s -> Line: %u : \n\t", s, __LINE__); printToken(*t); fprintf(stderr, "\t"); printToken(*t2);
 #else
 #define DEBUG(s, t, t2)
-#endif
-
-#ifdef PARSER_DEBUG_PRINT
-#include <stdio.h>
-#define DEBUG_PRINT(s) fprintf(stderr, "Line: %u -> %s\n", __LINE__, s);
-#else 
-#define DEBUG_PRINT(s)
 #endif
 
 #define MAX_BUFFER_COUNT 64
