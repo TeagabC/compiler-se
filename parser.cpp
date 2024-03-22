@@ -1,6 +1,6 @@
 #include "parser.h"
 #include "lex.h"
-#include "parser_types.h"
+#include "ast_types.h"
 #include "stack.h"
 
 #include <cassert>

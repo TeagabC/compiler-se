@@ -13,5 +13,8 @@ Stack* stackCreate(int capacity, bool zero_initalize = false);
 void stackDestroy(Stack* stack);
 
 void* stackPush(Stack* stack, int size);
-void stackPop(Stack* stack, int size);
-void stackPop(Stack* stack, void *reset_ptr);
+void* stackPop(Stack* stack, int size);
+void* stackPop(Stack* stack, void *reset_ptr);
+
+int stackSize(Stack* stack);
+

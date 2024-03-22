@@ -1,4 +1,4 @@
-#include "parser_types.h"
+#include "ast_types.h"
 #include <cassert>
 #include <cstdio>
 
@@ -85,17 +85,18 @@ void declaration(Declaration* node) {
   tabs++;
   
   identifier(node->identifier);
+  printf("\n");
   
   type(node->decl_type);
 
   for (int i = 0; i < node->qualifiers_count; i++) {
-    qualifier(node->qualifiers[i]);
     printf("\n");
+    qualifier(node->qualifiers[i]);
   }
 
 
   if (node->expr != nullptr) {
-    printTab( "Set Expr:\n");
+    printTab( "\nSet Expr:\n");
     expr(node->expr);
   }
 
@@ -275,6 +276,8 @@ void unary(Unary* node) {
       assert(false && "Unary");
   }
 
+  expr(node->expr);
+
   tabs--;
 }
 
@@ -368,6 +371,7 @@ void struct_(Struct* node) {
   identifier(node->identifier);
 
   for (int i = 0; i < node->declarations_count; i++) {
+    printf("\n");
     declaration(node->declarations[i]);
   }
 

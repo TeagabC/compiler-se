@@ -1,20 +1,24 @@
 #pragma once 
-#include "ht.h"
+#include "hash_table.h"
+#include "stack.h"
 
-extern HashTable* scopes;
+extern Stack* scopes_stack;
 
 struct Symbol;
 
 struct Scope {
   Scope* parent;
-
   HashTable* symbols;
 };
 
-void scopeDeclare(Scope* scope, const char* start, const char* end, Symbol symbol);
+void scopeStackCreate(int capacity = 4096);
+void scopeStackDestroy();
 
-Symbol scopeResolve(Scope* scope, const char* start, const char* end);
-Symbol scopeResolveMember(Scope* scope, const char* start, const char* end);
+Scope* scopeCreate(Scope* parent, int capacity = 16);
+
+void scopeDeclare(Scope* scope, Symbol* symbol);
+
+Symbol* scopeResolve(Scope* scope, const char* start, const char* end);
+Symbol* scopeResolveMember(Scope* scope, const char* start, const char* end);
 
 bool scopeIsDefined(Scope* scope, const char* start, const char* end);
-;

@@ -108,7 +108,7 @@ literal :
   FALSE;
 
 unary :
-  AND |
+  ADD |
   SUB |
   NOT;
 
@@ -155,7 +155,7 @@ expr :
   literal;
 
 function_param :
-  id COLON type |
+  i COLON type |
   type;
 
 function_header :

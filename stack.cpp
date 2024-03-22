@@ -62,15 +62,21 @@ void* stackPush(Stack* stack, int size) {
   return output;
 }
 
-void stackPop(Stack* stack, int size) {
+void* stackPop(Stack* stack, int size) {
   DEBUG_ASSERT(stack->current - size >= stack->base && "stackPop underflow");
   stack->current -= size;
   DEBUG_PRINT("stackPop: stack: %p size = %i\n", stack, size);
+  return stack->current;
 }
 
-void stackPop(Stack* stack, void *reset_ptr) {
-  DEBUG_ASSERT(reset_ptr < stack->current && reset_ptr > stack->base);
+void* stackPop(Stack* stack, void *reset_ptr) {
+  DEBUG_ASSERT(reset_ptr < stack->current && reset_ptr >= stack->base);
   stack->current = (uint8_t*) reset_ptr;
   DEBUG_PRINT("stackReset: stack: %p reset_ptr = %p\n", stack, reset_ptr);
+  return stack->current;
+}
+
+int stackSize(Stack* stack) {
+  return stack->current - stack->base;
 }
 

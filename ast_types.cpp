@@ -1,4 +1,4 @@
-#include "parser_types.h"
+#include "ast_types.h"
 #include "lex.h"
 #include <cassert>
 #include <stdio.h>

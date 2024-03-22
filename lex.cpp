@@ -1,5 +1,5 @@
 #include "lex.h"
-#include "ht.h"
+#include "hash_table.h"
 
 #include <cstdlib>
 #include <cstring>
