@@ -4,7 +4,27 @@
 #include "symbol.h"
 
 #include <cassert>
-#include <ios>
+
+#define DEFREF_DEBUG
+
+#ifdef DEFREF_DEBUG
+#define DEFREF_CALLSTACK_DEBUG
+#define DEFREF_PRINT_DEBUG
+#endif
+
+#ifdef DEFREF_CALLSTACK_DEBUG
+#include <cstdio>
+#define DEBUG_ENTRY() fprintf(stderr, "DEFREF: Enter %s\n", __func__);
+#else
+#define DEBUG_ENTRY()
+#endif
+
+#ifdef DEFREF_PRINT_DEBUG
+#include <cstdio>
+#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+#else
+#define DEBUG_PRINT(...)
+#endif
 
 Scope* current_scope;
 
@@ -13,8 +33,68 @@ struct Name {
   const char* end;
 };
 
+Symbol* createSymbol(Name name, Symbol type_sym) {
+  switch (type_sym.type) {
+    case SymbolType::STRUCT:
+      return symbolCreateStructInstance(name.start, name.end, &type_sym.struct_);
+
+    case SymbolType::ENUM:
+      return symbolCreateEnumInstance(name.start, name.end, &type_sym.enum_);
+    
+    // TODO: special case for pointer
+
+    default:
+      return symbolCreateVariable(type_sym.type, name.start, name.end);
+  }
+}
+
+bool matchAssignmentTypes(Symbol* symbol, Symbol expr_sym) {
+  if (symbol->type != expr_sym.type) {
+    // TODO: check implicit casting rules
+    if (symbol->type == SymbolType::U8 && expr_sym.type == SymbolType::U32) {
+      return true;
+    }
+    if (symbol->type == SymbolType::I8 && 
+        (expr_sym.type == SymbolType::U8 || expr_sym.type == SymbolType::U32)) {
+      return true;
+    }
+    if (symbol->type == SymbolType::I32 && expr_sym.type == SymbolType::U32) {
+      return true;
+    }
+        
+    assert(false && "Assignment type doesn't match");
+  }
+
+  switch (symbol->type) {
+    case SymbolType::ENUM_INSTANCE:
+      if (symbol->enum_instance.enum_decl != expr_sym.enum_instance.enum_decl) {
+        assert(false && "Assignment different enum types");
+      }
+
+      break;
+
+    case SymbolType::STRUCT_INSTANCE:
+      if (symbol->struct_instance.struct_decl != expr_sym.struct_instance.struct_decl) {
+        assert(false && "Assignment different struct types");
+      }
+
+    default:
+      break;
+  }
+
+  return true;
+}
+
+bool matchCondition(Symbol expr_sym) {
+  if (expr_sym.type != SymbolType::BOOL) {
+    // TODO: check if type is castable to bool
+    assert(false && "Bool expr isn't bool");
+  }
+  return true;
+}
 
 SymbolType simpleType(SimpleType* node) {
+  DEBUG_ENTRY();
   switch (node->type) {
     case ASTType::SIMPLE_TYPE_I8:
       return SymbolType::I8;
@@ -37,6 +117,7 @@ SymbolType simpleType(SimpleType* node) {
 }
     
 Symbol* identifierResolve(Identifier* node) {
+  DEBUG_ENTRY();
   Symbol* symbol = scopeResolve(current_scope, node->identifier->start, node->identifier->end);
 
   if (symbol != nullptr) {
@@ -79,6 +160,7 @@ Symbol* identifierResolve(Identifier* node) {
 }
 
 Name identifierDecl(Identifier* node) {
+  DEBUG_ENTRY();
   Symbol* symbol = scopeResolveMember(current_scope, node->identifier->start, node->identifier->end);
   if (symbol != nullptr) {
     assert(false && "Redeclaration");
@@ -92,6 +174,7 @@ Name identifierDecl(Identifier* node) {
 }
 
 Symbol* identifierType(Identifier* node) {
+  DEBUG_ENTRY();
   Symbol* symbol = scopeResolve(current_scope, node->identifier->start, node->identifier->end);
  
   if (symbol == nullptr) {
@@ -126,6 +209,7 @@ Symbol* identifierType(Identifier* node) {
 }
 
 Symbol type(Type* node) {
+  DEBUG_ENTRY();
   switch (node->type) {
     case ASTType::TYPE_SIMPLE:
       return {simpleType(node->simple_type)};
@@ -139,6 +223,7 @@ Symbol type(Type* node) {
 }
 
 Symbol qualifier(Qualifier* node) {
+  DEBUG_ENTRY();
   switch (node->type) {
     case ASTType::QUALIFIER_CONST:
       break;
@@ -149,61 +234,14 @@ Symbol qualifier(Qualifier* node) {
     default:
       assert(false && "Qualifier");
   }
-}
-
-Symbol* createSymbol(Name name, Symbol type_sym) {
-  switch (type_sym.type) {
-    case SymbolType::STRUCT:
-      return symbolCreateStructInstance(name.start, name.end, &type_sym.struct_);
-
-    case SymbolType::ENUM:
-      return symbolCreateEnumInstance(name.start, name.end, &type_sym.enum_);
-    
-    // TODO: special case for pointer
-
-    default:
-      return symbolCreateVariable(type_sym.type, name.start, name.end);
-  }
-}
-
-bool matchTypes(Symbol* symbol, Symbol expr_sym) {
-  if (symbol->type != expr_sym.type) {
-    // TODO: check implicit casting rules
-    assert(false && "Assignment type doesn't match");
-  }
-
-  switch (symbol->type) {
-    case SymbolType::ENUM_INSTANCE:
-      if (symbol->enum_instance.enum_decl != expr_sym.enum_instance.enum_decl) {
-        assert(false && "Assignment different enum types");
-      }
-
-      break;
-
-    case SymbolType::STRUCT_INSTANCE:
-      if (symbol->struct_instance.struct_decl != expr_sym.struct_instance.struct_decl) {
-        assert(false && "Assignment different struct types");
-      }
-
-    default:
-      break;
-  }
-
-  return true;
-}
-
-bool matchBool(Symbol expr_sym) {
-  if (expr_sym.type != SymbolType::BOOL) {
-    // TODO: check if type is castable to bool
-    assert(false && "Bool expr isn't bool");
-  }
-  return true;
+  return {};
 }
 
 Symbol expr(Expr* node);
 void block(Block* node);
 
-void declaration(Declaration* node) {
+Symbol* declaration(Declaration* node) {
+  DEBUG_ENTRY();
   Name id = identifierDecl(node->identifier);
   Symbol type_sym = type(node->decl_type);
   Symbol* symbol = createSymbol(id, type_sym);
@@ -214,34 +252,36 @@ void declaration(Declaration* node) {
     qualifier(node->qualifiers[i]);
   }
 
-  // TODO: implement
-  if (node->expr != nullptr) {
-    expr_sym = expr(node->expr);
-  }
+  // TODO: handle declarations of struct or enum instances
 
-  if (!matchTypes(symbol, expr_sym)) {
-    // this never actually hits
-    assert(false && "Declaration expr assignment type doesn't match");
+  if (node->expr != nullptr) {
+    DEBUG_PRINT("Declaration expr exists");
+    expr_sym = expr(node->expr);
+    if (!matchAssignmentTypes(symbol, expr_sym)) {
+      assert(false && "Declaration expr assignment type doesn't match");
+    }
   }
 
   scopeDeclare(current_scope, symbol);
+
+  return symbol;
 }
 
 void assignment(Assignment* node) {
+  DEBUG_ENTRY();
   Symbol* symbol = identifierResolve(node->identifier);
   Symbol expr_sym = expr(node->expr);
 
-  if (!matchTypes(symbol, expr_sym)) {
-    // this never actually hits
+  if (!matchAssignmentTypes(symbol, expr_sym)) {
     assert(false && "Assignment types don't match");
   }
 }
 
 void conditional(Conditional* node) {
+  DEBUG_ENTRY();
   Symbol expr_sym = expr(node->condition);
 
-  if (!matchBool(expr_sym)) {
-    // this never actually hits
+  if (!matchCondition(expr_sym)) {
     assert(false && "Conditional condition is not bool");
   }
 
@@ -253,10 +293,10 @@ void conditional(Conditional* node) {
 }
 
 void while_(While* node) {
+  DEBUG_ENTRY();
   Symbol expr_sym = expr(node->condition);
   
-  if (!matchBool(expr_sym)) {
-    // this never actually hits
+  if (!matchCondition(expr_sym)) {
     assert(false && "While condition is not bool");
   }
 
@@ -264,12 +304,16 @@ void while_(While* node) {
 }
 
 void break_(Break* node) {
+  DEBUG_ENTRY();
 }
 
 void continue_(Continue* node) {
+  DEBUG_ENTRY();
 }
 
 void return_(Return* node) {
+  DEBUG_ENTRY();
+  // TODO: we need to manage if we are currentlly in a function
   if (node->expr != nullptr) {
     expr(node->expr);
   }
@@ -279,6 +323,7 @@ void return_(Return* node) {
 }
 
 void statement(Statement* node) {
+  DEBUG_ENTRY();
   switch (node->type) {
     case ASTType::STATEMENT_CONDITION:
       conditional(node->conditional);
@@ -307,6 +352,7 @@ void statement(Statement* node) {
 }
 
 void blockTag(BlockTag* node) {
+  DEBUG_ENTRY();
   switch (node->type) {
     case ASTType::BLOCK_TAG_BLOCK:
       block(node->block);
@@ -320,6 +366,7 @@ void blockTag(BlockTag* node) {
 }
 
 void block(Block* node) {
+  DEBUG_ENTRY();
   if (node->namespace_ != nullptr) {
     // TODO: 
     identifierDecl(node->namespace_);
@@ -343,6 +390,7 @@ void block(Block* node) {
 }
 
 Symbol literal(Literal* node) {
+  DEBUG_ENTRY();
   switch (node->type) {
     case ASTType::LITERAL_STRING:
       return {SymbolType::STRING};
@@ -362,6 +410,7 @@ Symbol literal(Literal* node) {
 }
 
 Symbol call(Call* node) {
+  DEBUG_ENTRY();
   Symbol* func_sym = identifierResolve(node->identifier);
 
   if (func_sym->type != SymbolType::FUNCTION) {
@@ -371,34 +420,98 @@ Symbol call(Call* node) {
   for (int i = 0; i < node->arguments_count; i++) {
     Symbol expr_sym = expr(node->arguments[i]);
     if (func_sym->function.parameter_vector->size <= i ||
-      !matchTypes((Symbol*)vecGet(func_sym->function.parameter_vector, i), expr_sym)) {
+      !matchAssignmentTypes((Symbol*)vecGet(func_sym->function.parameter_vector, i), expr_sym)) {
       assert(false && "Function call parameter types don't match definition");
     }
   }
 
-  return *func_sym;
-}
-
-Symbol unary(Unary* node) {
-  Symbol symbol = expr(node->expr);
-  switch (node->type) {
-    case ASTType::UNARY_NOT:
-      break;
-    case ASTType::UNARY_PLUS:
-      break;
-    case ASTType::UNARY_MINUS:
-      break;
-    default:
-      assert(false && "Unary");
+  if (func_sym->function.struct_return_type != nullptr) {
+    Symbol output = {SymbolType::STRUCT_INSTANCE};
+    output.struct_instance.struct_decl = func_sym->function.struct_return_type;
+    return output;
+  }
+  else {
+    return {func_sym->function.simple_return_type};
   }
 }
 
+Symbol unary(Unary* node) {
+  DEBUG_ENTRY();
+  Symbol symbol = expr(node->expr);
+  switch (node->type) {
+    case ASTType::UNARY_NOT:
+      if (symbol.type != SymbolType::BOOL) assert(false && "Can only not a bool");
+      return symbol;
+    case ASTType::UNARY_PLUS:
+    case ASTType::UNARY_MINUS:
+      switch (symbol.type) {
+        case SymbolType::I8:
+        case SymbolType::U8:
+        case SymbolType::I32:
+        case SymbolType::U32:
+        case SymbolType::F32:
+          return symbol;
+        default:
+          assert(false && "Can only unary plus/minus int or float types");
+      }
+    default:
+      assert(false && "Unary");
+  }
+  // TODO: use some unary op table instead of this
+}
+
 Symbol binary(Binary* node) {
-  expr(node->first);
-  expr(node->second);
+  DEBUG_ENTRY();
+  Symbol first = expr(node->first);
+  Symbol second = expr(node->second);
+  if (first.type != second.type) {
+    assert(false && "Binary expression has implicit cast");
+  }
+
+  switch (first.type) {
+    case SymbolType::I8:
+    case SymbolType::U8:
+    case SymbolType::I32:
+    case SymbolType::U32:
+    case SymbolType::F32:
+    case SymbolType::BOOL:
+      break;
+    // TOOD: handle pointers
+    default:
+      assert(false && "Binary op on non-arithmetic types");
+  }
+
+  switch (node->type) {
+    case ASTType::BINARY_MUL:
+    case ASTType::BINARY_DIV:
+    case ASTType::BINARY_MOD:
+    case ASTType::BINARY_ADD:
+    case ASTType::BINARY_SUB:
+      return first;
+
+    case ASTType::BINARY_LT:
+    case ASTType::BINARY_GT:
+    case ASTType::BINARY_LE:
+    case ASTType::BINARY_GE:
+    case ASTType::BINARY_EQ:
+    case ASTType::BINARY_NE:
+      return {SymbolType::BOOL};
+
+    case ASTType::BINARY_AND:
+    case ASTType::BINARY_OR:
+    case ASTType::BINARY_XOR:
+      if (first.type != SymbolType::BOOL) assert(false && "Binary bitwise on non bool types");
+      return first;
+
+    default:
+      assert(false && "Binary");
+  }
+
+  // TODO: use some binary op table instead of this
 }
 
 Symbol expr(Expr* node) {
+  DEBUG_ENTRY();
   switch (node->type) {
     case ASTType::EXPRESSION_CALL:
       return call(node->call);
@@ -420,15 +533,17 @@ Symbol expr(Expr* node) {
   }
 }
 
-void functionParam(FunctionParam* node) {
+Symbol* functionParam(FunctionParam* node) {
+  DEBUG_ENTRY();
   Name id = identifierDecl(node->identifier);
   Symbol type_sym = type(node->decl_type);
   Symbol* symbol = createSymbol(id, type_sym);
 
-  scopeDeclare(current_scope, symbol);
+  return symbol;
 }
 
 void function(Function* node) {
+  DEBUG_ENTRY();
   Name id = identifierDecl(node->header->identifier);
   Symbol return_type = type(node->header->return_type);
   Symbol* symbol = symbolCreateFunction(id.start, id.end, current_scope, return_type);
@@ -436,10 +551,12 @@ void function(Function* node) {
   current_scope = symbol->function.scope;
 
   for (int i = 0; i < node->header->parameter_count; i++) {
-    functionParam(node->header->parameter_list[i]);
+    Symbol* param_sym = functionParam(node->header->parameter_list[i]);
+    symbolAddFunctionParamChild(symbol, param_sym->start, param_sym->end, param_sym);
   }
 
   if (node->expr != nullptr) {
+    // TODO: does the type of this match return type?
     expr(node->expr);
   }
 
@@ -448,25 +565,28 @@ void function(Function* node) {
   }
 
   current_scope = current_scope->parent;
+  scopeDeclare(current_scope, symbol);
 }
 
 void struct_(Struct* node) {
+  DEBUG_ENTRY();
   Name id = identifierDecl(node->identifier);
   Symbol* symbol = symbolCreateStruct(id.start, id.end, current_scope);
 
   current_scope = symbol->struct_.members_table;
 
   for (int i = 0; i < node->declarations_count; i++) {
-    Name decl_id = identifierDecl(node->declarations[i]->identifier);
-    symbolAddStructChild(symbol, decl_id.start, decl_id.end);
+    Symbol* decl_sym = declaration(node->declarations[i]);
+    symbolAddStructChild(symbol, decl_sym->start, decl_sym->end, decl_sym);
 
-    declaration(node->declarations[i]);
   }
 
   current_scope = symbol->struct_.members_table->parent;
+  scopeDeclare(current_scope, symbol);
 }
 
 void enum_(Enum* node) {
+  DEBUG_ENTRY();
   Name id = identifierDecl(node->identifier);
   Symbol* symbol = symbolCreateEnum(id.start, id.end);
 
@@ -478,6 +598,7 @@ void enum_(Enum* node) {
 }
 
 void primaryTag(PrimaryTag* node) {
+  DEBUG_ENTRY();
   switch (node->type) {
     case ASTType::PRIMARY_TAG_DECL:
       declaration(node->decl);
@@ -497,6 +618,7 @@ void primaryTag(PrimaryTag* node) {
 }
 
 void primary(Primary* node) {
+  DEBUG_ENTRY();
   for (int i = 0; i < node->primary_tags_count; i++) {
     primaryTag(node->primary_tags[i]);
   }

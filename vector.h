@@ -8,7 +8,7 @@ struct Vector {
 };
 
 Vector* vecCreate(int initial_capacity, int item_size);
-void vecDestroy(Vector* vector);
+void vecDestroy(Vector*& vector);
 
 void* vecGet(Vector* vector, int index);
 void vecSet(Vector* vector, int index, void* item);

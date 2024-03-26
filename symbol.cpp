@@ -95,7 +95,7 @@ Symbol* symbolCreateEnum(const char* start, const char* end) {
   return symbol;
 }
 
-Symbol* symbolCreateEnumInstance(const char* start, const char* end, Symbol enum_decl) {
+Symbol* symbolCreateEnumInstance(const char* start, const char* end, EnumComponent* enum_decl) {
   SYMBOL_ASSERT(symbol_stack != nullptr);
   SYMBOL_ASSERT(enum_decl != nullptr);
   SYMBOL_ASSERT(enum_decl->type == SymbolType::ENUM);
@@ -105,7 +105,7 @@ Symbol* symbolCreateEnumInstance(const char* start, const char* end, Symbol enum
   symbol->start = start;
   symbol->end = end;
 
-  symbol->enum_instance.enum_decl = &enum_decl.enum_;
+  symbol->enum_instance.enum_decl = enum_decl;
 
   return symbol;
 }
@@ -119,13 +119,13 @@ Symbol* symbolCreateStruct(const char* start, const char* end, Scope* parent) {
   symbol->end = end;
 
   symbol->struct_.members_table = scopeCreate(parent);
-  symbol->struct_.members_vector = vecCreate(STRUCT_INITIAL_CAPACITY, 2 * sizeof(char*));
+  symbol->struct_.members_vector = vecCreate(STRUCT_INITIAL_CAPACITY, sizeof(Symbol*));
   symbol->struct_.size = 0;
 
   return symbol;
 }
 
-Symbol* symbolCreateStructInstance(const char* start, const char* end, Symbol* struct_decl) {
+Symbol* symbolCreateStructInstance(const char* start, const char* end, StructComponent* struct_decl) {
   SYMBOL_ASSERT(symbol_stack != nullptr);
   SYMBOL_ASSERT(struct_decl != nullptr);
   SYMBOL_ASSERT(struct_decl->type == SymbolType::STRUCT);
@@ -135,7 +135,7 @@ Symbol* symbolCreateStructInstance(const char* start, const char* end, Symbol* s
   symbol->start = start;
   symbol->end = end;
 
-  symbol->struct_instance.struct_decl = &struct_decl->struct_;
+  symbol->struct_instance.struct_decl = struct_decl;
 
   return symbol;
 }
@@ -182,20 +182,18 @@ void symbolAddEnumChild(Symbol* symbol, const char* start, const char* end) {
   htSet(symbol->enum_.table, start, end, (void*) (unsigned long) symbol->enum_.table->length);
 }
 
-void symbolAddStructChild(Symbol* symbol, const char* start, const char* end) {
+void symbolAddStructChild(Symbol* symbol, const char* start, const char* end, Symbol* child) {
   SYMBOL_ASSERT(symbol != nullptr);
   SYMBOL_ASSERT(symbol->type == SymbolType::STRUCT);
   SYMBOL_ASSERT(child != nullptr);
 
-  const char* pair[2] = {start, end};
-  vecPush(symbol->struct_.members_vector, pair);
+  vecPush(symbol->struct_.members_vector, &child);
 }
 
 void symbolAddFunctionParamChild(Symbol* symbol, const char* start, const char* end, Symbol* child) {
   SYMBOL_ASSERT(symbol != nullptr);
   SYMBOL_ASSERT(symbol->type == SymbolType::FUNCTION);
 
-  scopeDeclare(symbol->function.scope, start, end, child);
-  vecPush(symbol->function.parameter_vector, child);
+  vecPush(symbol->function.parameter_vector, &child);
 }
 

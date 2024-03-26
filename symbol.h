@@ -103,5 +103,5 @@ void symbolAddEnumChild(Symbol* symbol, const char* start, const char* end);
 // This is a little misleading. This adds a start, end pair to structs member_list
 // The assumption is that the structs scope will be pushed when visiting and so
 // the member_table will be set by visiting and not this function.
-void symbolAddStructChild(Symbol* symbol, const char* start, const char* end);
+void symbolAddStructChild(Symbol* symbol, const char* start, const char* end, Symbol* child);
 void symbolAddFunctionParamChild(Symbol* symbol, const char* start, const char* end, Symbol* child);
