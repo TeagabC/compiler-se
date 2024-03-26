@@ -33,6 +33,8 @@ struct Name {
   const char* end;
 };
 
+namespace defref {
+
 Symbol* createSymbol(Name name, Symbol type_sym) {
   switch (type_sym.type) {
     case SymbolType::STRUCT:
@@ -624,6 +626,7 @@ void primary(Primary* node) {
   }
 }
 
+}
 
 void visitDefRef(Primary* node) {
   scopeStackCreate();
@@ -631,7 +634,7 @@ void visitDefRef(Primary* node) {
 
   current_scope = scopeCreate(nullptr);
   
-  primary(node);
+  defref::primary(node);
 }
 
 void defref_destroy() {
