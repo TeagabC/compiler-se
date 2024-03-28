@@ -719,6 +719,7 @@ Binary* binary(Token*& tokens) {
 
   if (!is_binary_expr) return (Binary*) resetStacks(node, expr_buffer);
 
+
   /*
    * WARNING: this is fragile. we know that expr_buffer contains
    * exprs but we need a binary. If it is a binary expression then 
@@ -732,7 +733,11 @@ Binary* binary(Token*& tokens) {
   tokens = current;
   node = expr_buffer[0]->binary;
   node->end = current;
-  //pop_stack(expr_buffer[0]);
+
+  stackPop(stack, expr_buffer[0]);
+  stackPop(buffer_pool, op_buffer);
+  stackPop(buffer_pool, expr_buffer);
+
   DEBUG("Match Binary Expression", node->start, node->end);
   return node;
 }

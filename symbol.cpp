@@ -110,7 +110,7 @@ Symbol* symbolCreateEnumInstance(const char* start, const char* end, EnumCompone
   return symbol;
 }
 
-Symbol* symbolCreateStruct(const char* start, const char* end, Scope* parent) {
+Symbol* symbolCreateStruct(void* node, const char* start, const char* end, Scope* parent) {
   SYMBOL_ASSERT(symbol_stack != nullptr);
 
   Symbol* symbol = (Symbol*) stackPush(symbol_stack, sizeof(Symbol));
@@ -118,7 +118,7 @@ Symbol* symbolCreateStruct(const char* start, const char* end, Scope* parent) {
   symbol->start = start;
   symbol->end = end;
 
-  symbol->struct_.members_table = scopeCreate(parent);
+  symbol->struct_.members_table = scopeCreate(parent, node);
   symbol->struct_.members_vector = vecCreate(STRUCT_INITIAL_CAPACITY, sizeof(Symbol*));
   symbol->struct_.size = 0;
 
@@ -140,7 +140,7 @@ Symbol* symbolCreateStructInstance(const char* start, const char* end, StructCom
   return symbol;
 }
 
-Symbol* symbolCreateFunction(const char* start, const char* end, Scope* parent, Symbol return_type) {
+Symbol* symbolCreateFunction(void* node, const char* start, const char* end, Scope* parent, Symbol return_type) {
   SYMBOL_ASSERT(symbol_stack != nullptr);
 
   Symbol* symbol = (Symbol*) stackPush(symbol_stack, sizeof(Symbol));
@@ -148,7 +148,7 @@ Symbol* symbolCreateFunction(const char* start, const char* end, Scope* parent, 
   symbol->start = start;
   symbol->end = end;
 
-  symbol->function.scope = scopeCreate(parent);
+  symbol->function.scope = scopeCreate(parent, node);
   symbol->function.parameter_vector = vecCreate(FUNCTION_PARAM_INITIAL_CAPACITY, sizeof(Symbol*));
 
   if (return_type.type == SymbolType::STRUCT) {
@@ -182,6 +182,13 @@ void symbolAddEnumChild(Symbol* symbol, const char* start, const char* end) {
   htSet(symbol->enum_.table, start, end, (void*) (unsigned long) symbol->enum_.table->length);
 }
 
+unsigned long symbolGetEnumChild(Symbol* symbol, const char* start, const char* end) {
+  SYMBOL_ASSERT(symbol != nullptr);
+  SYMBOL_ASSERT(symbol->type == SymbolType::ENUM);
+
+  return (unsigned long) htGet(symbol->enum_.table, start, end);
+}
+
 void symbolAddStructChild(Symbol* symbol, const char* start, const char* end, Symbol* child) {
   SYMBOL_ASSERT(symbol != nullptr);
   SYMBOL_ASSERT(symbol->type == SymbolType::STRUCT);
@@ -190,10 +197,17 @@ void symbolAddStructChild(Symbol* symbol, const char* start, const char* end, Sy
   vecPush(symbol->struct_.members_vector, &child);
 }
 
+Symbol* symbolGetStructChild(StructComponent* component, const char* start, const char* end) {
+  SYMBOL_ASSERT(component != nullptr);
+
+  return scopeResolveMember(component->members_table, start, end);
+}
+
 void symbolAddFunctionParamChild(Symbol* symbol, const char* start, const char* end, Symbol* child) {
   SYMBOL_ASSERT(symbol != nullptr);
   SYMBOL_ASSERT(symbol->type == SymbolType::FUNCTION);
 
+  scopeDeclare(symbol->function.scope, child);
   vecPush(symbol->function.parameter_vector, &child);
 }
 

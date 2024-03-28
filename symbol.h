@@ -3,6 +3,8 @@
 #include "stack.h"
 #include "vector.h"
 
+#include <llvm-c/Types.h>
+
 extern Stack* symbol_stack;
 
 enum class SymbolType {
@@ -75,6 +77,9 @@ struct Symbol {
   const char* start;
   const char* end;
 
+  LLVMTypeRef llvm_type;
+  LLVMValueRef llvm_value;
+
   union {
     VariableComponent variable;
     PointerComponent poiner;
@@ -95,13 +100,15 @@ Symbol* symbolCreateVariable(SymbolType type, const char* start, const char* end
 Symbol* symbolCreatePointer(const char* start, const char* end);
 Symbol* symbolCreateEnum(const char* start, const char* end);
 Symbol* symbolCreateEnumInstance(const char* start, const char* end, EnumComponent* enum_decl);
-Symbol* symbolCreateStruct(const char* start, const char* end, Scope* parent);
+Symbol* symbolCreateStruct(void* node, const char* start, const char* end, Scope* parent);
 Symbol* symbolCreateStructInstance(const char* start, const char* end, StructComponent* struct_decl);
-Symbol* symbolCreateFunction(const char* start, const char* end, Scope* parent, Symbol return_type);
+Symbol* symbolCreateFunction(void* node, const char* start, const char* end, Scope* parent, Symbol return_type);
 
 void symbolAddEnumChild(Symbol* symbol, const char* start, const char* end);
+unsigned long symbolGetEnumChild(Symbol* symbol, const char* start, const char* end);
 // This is a little misleading. This adds a start, end pair to structs member_list
 // The assumption is that the structs scope will be pushed when visiting and so
 // the member_table will be set by visiting and not this function.
 void symbolAddStructChild(Symbol* symbol, const char* start, const char* end, Symbol* child);
+Symbol* symbolGetStructChild(StructComponent* component, const char* start, const char* end);
 void symbolAddFunctionParamChild(Symbol* symbol, const char* start, const char* end, Symbol* child);

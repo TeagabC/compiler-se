@@ -14,7 +14,8 @@ struct Scope {
 void scopeStackCreate(int capacity = 4096);
 void scopeStackDestroy();
 
-Scope* scopeCreate(Scope* parent, int capacity = 16);
+Scope* scopeCreate(Scope* parent, void* node, int capacity = 16);
+Scope* scopeGet(void* index);
 
 void scopeDeclare(Scope* scope, Symbol* symbol);
 

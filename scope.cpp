@@ -2,6 +2,8 @@
 #include "hash_table.h"
 #include "stack.h"
 #include "symbol.h"
+#include "vector.h"
+#include <unordered_map>
 
 #define SCOPE_DEBUG
 
@@ -26,6 +28,8 @@
 
 Stack* scopes_stack;
 
+std::unordered_map<void*, Scope*> node_scope_map;
+
 void scopeStackCreate(int capacity) {
   DEBUG_ASSERT(scopes_stack == nullptr && "scopeStackCreate: scope stack in not nullptr");
   scopes_stack = stackCreate(capacity * sizeof(Scope));
@@ -48,16 +52,22 @@ void scopeStackDestroy() {
   scopes_stack = nullptr;
 }
 
-Scope* scopeCreate(Scope* parent, int capacity) {
+Scope* scopeCreate(Scope* parent, void* node, int capacity) {
   DEBUG_ASSERT(scopes_stack != nullptr && "scopeCreate: scopes stack is nullptr");
   
   Scope* scope = (Scope*) stackPush(scopes_stack, sizeof(Scope));
   scope->parent = parent;
   scope->symbols = htCreate(capacity);
 
+  node_scope_map[node] = scope;
+
   DEBUG_PRINT("Create scope: %p\n", scope);
 
   return scope;
+}
+
+Scope* scopeGet(void* node) {
+  return node_scope_map.at(node);
 }
 
 void scopeDeclare(Scope* scope, Symbol* symbol) {

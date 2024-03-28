@@ -4,6 +4,8 @@
 #include "symbol.h"
 
 #include <cassert>
+#include <llvm-c/Core.h>
+#include <llvm-c/Types.h>
 
 #define DEFREF_DEBUG
 
@@ -374,7 +376,7 @@ void block(Block* node) {
     identifierDecl(node->namespace_);
   }
 
-  current_scope = scopeCreate(current_scope);
+  current_scope = scopeCreate(current_scope, node);
 
   if (node->statement != nullptr) {
     statement(node->statement);
@@ -548,7 +550,7 @@ void function(Function* node) {
   DEBUG_ENTRY();
   Name id = identifierDecl(node->header->identifier);
   Symbol return_type = type(node->header->return_type);
-  Symbol* symbol = symbolCreateFunction(id.start, id.end, current_scope, return_type);
+  Symbol* symbol = symbolCreateFunction(node, id.start, id.end, current_scope, return_type);
 
   current_scope = symbol->function.scope;
 
@@ -573,7 +575,7 @@ void function(Function* node) {
 void struct_(Struct* node) {
   DEBUG_ENTRY();
   Name id = identifierDecl(node->identifier);
-  Symbol* symbol = symbolCreateStruct(id.start, id.end, current_scope);
+  Symbol* symbol = symbolCreateStruct(node, id.start, id.end, current_scope);
 
   current_scope = symbol->struct_.members_table;
 
@@ -632,7 +634,7 @@ void visitDefRef(Primary* node) {
   scopeStackCreate();
   symbolStackCreate();
 
-  current_scope = scopeCreate(nullptr);
+  current_scope = scopeCreate(nullptr, node);
   
   defref::primary(node);
 }

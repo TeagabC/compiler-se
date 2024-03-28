@@ -1,8 +1,19 @@
-func x (x : i32, y : f32) : i32 {
-  x : u32;
+enum E {
+  NONE,
+  ONE,
+  TWO
+};
+
+struct S {
+  x : i32;
   y : i32;
+};
 
-  x = 1 + 2 + 3 + 4;
-  y = 1 + 2;
+func x (y : u32, z : u32) : u32 {
+  e : E;
+  s : S;
 
+  E.ONE;
+
+  return 0;
 }
