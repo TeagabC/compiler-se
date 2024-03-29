@@ -261,6 +261,12 @@ Token* lex(char* input, int max_token_count) {
   }
 
   if (token.type == TokenType::NONE) {
+    if (LEX_PRINT_TOKENS) {
+      for(int j = 0; j < i; j++) {
+        printToken(tokens[j]);
+      }
+    }
+
     destroyKeywordsTable();
     free(tokens);
     return nullptr;

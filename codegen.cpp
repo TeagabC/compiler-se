@@ -540,7 +540,6 @@ void function(Function* node) {
     Symbol* param_sym = identifierDef(node->header->parameter_list[j]->identifier);
     param_sym->llvm_type = param_types[j];
     param_sym->llvm_value = LLVMBuildAlloca(builder, param_types[j], "");
-    //param_sym->llvm_value = LLVMBuildAlloca(builder, LLVMInt32Type(), "");
     LLVMBuildStore(builder, LLVMGetParam(symbol->llvm_value, j), param_sym->llvm_value);
   }
 
